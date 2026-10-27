@@ -1,0 +1,15 @@
+// Installed by `winvm setup`. Lets @USER@ start, stop and query the Omarchy
+// Windows VM without a password prompt, so agents running in a systemd user
+// service (no active seat) can drive it. Every other pkexec use still prompts.
+polkit.addRule(function (action, subject) {
+  if (action.id !== "org.freedesktop.policykit.exec") return polkit.Result.NOT_HANDLED;
+  if (subject.user !== "@USER@") return polkit.Result.NOT_HANDLED;
+  if (action.lookup("program") !== "/usr/bin/omarchy-windows-vm") return polkit.Result.NOT_HANDLED;
+  var allowed = [
+    "/usr/bin/omarchy-windows-vm __priv up_wait",
+    "/usr/bin/omarchy-windows-vm __priv down",
+    "/usr/bin/omarchy-windows-vm __priv status",
+  ];
+  if (allowed.indexOf(action.lookup("command_line")) !== -1) return polkit.Result.YES;
+  return polkit.Result.NOT_HANDLED;
+});

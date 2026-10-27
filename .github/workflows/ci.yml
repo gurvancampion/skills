@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+      - name: Synced copies match the pinned sources
+        run: npm run check
+      - name: Package contains the packed skills
+        run: npm pack --dry-run
+      - name: Skills CLI discovers the catalog
+        run: npx -y skills@latest add . --list

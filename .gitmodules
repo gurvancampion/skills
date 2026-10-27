@@ -1,0 +1,20 @@
+[submodule "sources/mattpocock"]
+	path = sources/mattpocock
+	url = https://github.com/mattpocock/skills.git
+	shallow = true
+[submodule "sources/cursor-plugins"]
+	path = sources/cursor-plugins
+	url = https://github.com/cursor/plugins.git
+	shallow = true
+[submodule "sources/context7"]
+	path = sources/context7
+	url = https://github.com/upstash/context7.git
+	shallow = true
+[submodule "sources/ponytail"]
+	path = sources/ponytail
+	url = https://github.com/DietrichGebert/ponytail.git
+	shallow = true
+[submodule "sources/comfy-cli"]
+	path = sources/comfy-cli
+	url = https://github.com/Comfy-Org/comfy-cli.git
+	shallow = true

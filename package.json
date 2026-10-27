@@ -1,0 +1,35 @@
+{
+  "name": "@gurvancampion/skills",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Gurvan Campion's agent skills: create-pr and skill-authoring",
+  "author": "Gurvan Campion",
+  "license": "MIT",
+  "homepage": "https://github.com/gurvancampion/skills#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gurvancampion/skills.git"
+  },
+  "bugs": "https://github.com/gurvancampion/skills/issues",
+  "keywords": [
+    "agent-skills",
+    "skills",
+    "skills-npm",
+    "claude-code",
+    "opencode",
+    "copilot"
+  ],
+  "files": [
+    "dist/skills"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "sync": "node scripts/sync.ts",
+    "sync:update": "node scripts/sync.ts --update",
+    "check": "node scripts/sync.ts && git diff --exit-code -- skills",
+    "prepack": "node scripts/pack.ts"
+  }
+}
