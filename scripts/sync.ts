@@ -8,7 +8,10 @@ const args = process.argv.slice(2)
 if (args.some(arg => arg !== '--update'))
   throw new Error('Usage: node scripts/sync.ts [--update]')
 
-const git = (gitArgs: string[], cwd = root) => execFileSync('git', gitArgs, { cwd, encoding: 'utf8' }).trim()
+// Git hooks and `git rebase --exec` export GIT_DIR, which would make every `git -C sources/<key>`
+// call read this repository instead of the submodule, and record the wrong commit in SOURCE.md.
+const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_PREFIX'].includes(name)))
+const git = (gitArgs: string[], cwd = root) => execFileSync('git', gitArgs, { cwd, env, encoding: 'utf8' }).trim()
 
 const declared = git(['config', '-f', '.gitmodules', '--get-regexp', String.raw`^submodule\..*\.path$`])
   .split('\n')
@@ -22,7 +25,7 @@ for (const path of expected.filter(path => !declared.includes(path)))
 
 // `.gitmodules` marks every source shallow, so this fetches one commit per source.
 // --update moves each pin to the tip of the upstream default branch.
-execFileSync('git', ['submodule', 'update', '--init', ...(args.includes('--update') ? ['--remote'] : []), '--', ...expected], { cwd: root, stdio: 'inherit' })
+execFileSync('git', ['submodule', 'update', '--init', ...(args.includes('--update') ? ['--remote'] : []), '--', ...expected], { cwd: root, env, stdio: 'inherit' })
 
 const targets = new Set(Object.values(sources).map(source => source.target))
 for (const target of targets) {
