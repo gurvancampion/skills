@@ -99,3 +99,8 @@ export const sources: Record<string, Source> = {
 /** Hand-written origin folders under `skills/`. Sync never writes into them. */
 export const manual = ['gurvan']
 
+/**
+ * Origin folders or skill names that `node scripts/pack.ts` flattens into the
+ * npm package's `dist/skills/`. Machine-specific skills stay out of the package.
+ */
+export const packed = ['create-pr', 'skill-authoring']
