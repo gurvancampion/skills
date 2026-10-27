@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
-import { manual, sources } from '../meta.ts'
-import { assertValid, readSkillName, root, skillsRoot } from './skills.ts'
+import { sources } from '../meta.ts'
+import { assertValid, listSkills, readSkillName, root, skillsRoot } from './skills.ts'
 
 const args = process.argv.slice(2)
 if (args.some(arg => arg !== '--update'))
@@ -27,12 +27,10 @@ for (const path of expected.filter(path => !declared.includes(path)))
 // --update moves each pin to the tip of the upstream default branch.
 execFileSync('git', ['submodule', 'update', '--init', ...(args.includes('--update') ? ['--remote'] : []), '--', ...expected], { cwd: root, env, stdio: 'inherit' })
 
-const targets = new Set(Object.values(sources).map(source => source.target))
-for (const target of targets) {
-  if (manual.includes(target))
-    throw new Error(`skills/${target}/ is hand-written (\`manual\` in meta.ts) and cannot be a sync target`)
-  rmSync(join(skillsRoot, target), { recursive: true, force: true })
-}
+// A SOURCE.md marks a synced copy: remove every one, then regenerate them. Hand-written skills have
+// none, so they stay, and a target folder can also hold hand-written skills.
+for (const skill of listSkills().filter(skill => existsSync(join(skill.dir, 'SOURCE.md'))))
+  rmSync(skill.dir, { recursive: true, force: true })
 
 let synced = 0
 for (const [key, source] of Object.entries(sources)) {
@@ -67,6 +65,12 @@ for (const [key, source] of Object.entries(sources)) {
     writeFileSync(join(to, 'SOURCE.md'), `# Source\n\n- Repository: ${source.repository}\n- Path: \`${path}\`\n${renamed}- Commit: \`${commit}\`\n`)
     synced++
   }
+}
+
+// An origin folder left empty belonged to a source removed from meta.ts
+for (const entry of readdirSync(skillsRoot, { withFileTypes: true })) {
+  if (entry.isDirectory() && readdirSync(join(skillsRoot, entry.name)).length === 0)
+    rmSync(join(skillsRoot, entry.name), { recursive: true })
 }
 
 const skills = assertValid()

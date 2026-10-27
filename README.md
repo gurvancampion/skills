@@ -92,7 +92,7 @@ npm run check                   # fail if the committed copies differ from the p
 
 A source's optional `prefix` renames its skills (folder and `name:`) so another catalog can ship them next to this one; `SOURCE.md` keeps the upstream name.
 
-The sync wipes and regenerates every `target` folder, never the `manual` ones, and fails when an upstream skill moved, its `name:` changed, a replacement no longer matches, or two skills share a name.
+A `SOURCE.md` marks a synced copy: the sync removes and regenerates every skill folder holding one, never a hand-written skill, so a `target` can also be a `manual` folder. It fails when an upstream skill moved, its `name:` changed, a replacement no longer matches, or two skills share a name.
 
 To add an upstream source, add the submodule and its `meta.ts` entry, then sync:
 
