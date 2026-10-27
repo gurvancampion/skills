@@ -4,12 +4,12 @@
 
 ## Catalog
 
-Skills are grouped by origin under `skills/`. Installs are flat, so agents invoke them by name only.
+Skills are grouped by origin under `skills/`, keeping an upstream category folder where it helps (one level at most: `npx skills` reads three levels below `skills/`). Installs are flat, so agents invoke them by name only.
 
 ```text
 skills/
 ├── gurvan/       # hand-written: create-pr, skill-authoring, journal, omarchy-windows-vm
-├── mattpocock/   # 26 skills from mattpocock/skills
+├── mattpocock/   # 26 skills from mattpocock/skills, in its engineering/ and productivity/ folders
 ├── pstack/       # blast-radius, create-verification-skill, maintain-verification-skill, unslop (cursor/plugins)
 ├── context7/     # find-docs
 ├── ponytail/     # ponytail-review

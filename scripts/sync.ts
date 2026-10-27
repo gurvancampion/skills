@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join, resolve, sep } from 'node:path'
+import { basename, dirname, join, resolve, sep } from 'node:path'
 import { sources } from '../meta.ts'
 import { assertValid, listSkills, readSkillName, root, skillsRoot } from './skills.ts'
 
@@ -40,7 +40,11 @@ for (const [key, source] of Object.entries(sources)) {
   if (!existsSync(license))
     throw new Error(`${key}: license ${source.license} not found`)
 
-  for (const [path, name] of Object.entries(source.skills)) {
+  for (const [path, destination] of Object.entries(source.skills)) {
+    // `npx skills` reads three levels below skills/: <target>/<category>/<name> at most
+    if (!/^(?:[\w.-]+\/)?[\w.-]+$/.test(destination))
+      throw new Error(`${key}: ${destination} must be <name> or <category>/<name>`)
+    const name = basename(destination)
     const from = resolve(sourceRoot, path)
     if (!from.startsWith(sourceRoot + sep) || !existsSync(join(from, 'SKILL.md')))
       throw new Error(`${key}: no SKILL.md in ${path}; did upstream move it?`)
@@ -49,7 +53,7 @@ for (const [key, source] of Object.entries(sources)) {
       throw new Error(`${key}: ${path} declares name ${declaredName ?? '(none)'}, meta.ts expects ${name}`)
 
     const installedName = `${source.prefix ?? ''}${name}`
-    const to = join(skillsRoot, source.target, installedName)
+    const to = join(skillsRoot, source.target, dirname(destination), installedName)
     cpSync(from, to, { recursive: true })
     const skillFile = join(to, 'SKILL.md')
     if (source.prefix)
@@ -67,10 +71,13 @@ for (const [key, source] of Object.entries(sources)) {
   }
 }
 
-// An origin folder left empty belonged to a source removed from meta.ts
-for (const entry of readdirSync(skillsRoot, { withFileTypes: true })) {
-  if (entry.isDirectory() && readdirSync(join(skillsRoot, entry.name)).length === 0)
-    rmSync(join(skillsRoot, entry.name), { recursive: true })
+// A category or origin folder left empty belonged to skills or a source removed from meta.ts
+const removeIfEmpty = (dir: string) => readdirSync(dir).length === 0 && rmSync(dir, { recursive: true })
+for (const origin of readdirSync(skillsRoot, { withFileTypes: true }).filter(entry => entry.isDirectory())) {
+  const originDir = join(skillsRoot, origin.name)
+  for (const category of readdirSync(originDir, { withFileTypes: true }).filter(entry => entry.isDirectory()))
+    removeIfEmpty(join(originDir, category.name))
+  removeIfEmpty(originDir)
 }
 
 const skills = assertValid()
