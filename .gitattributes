@@ -1,0 +1,2 @@
+# Synced copies are stored byte for byte so `npm run check` is reproducible on any OS
+skills/** -text
