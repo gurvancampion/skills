@@ -1,0 +1,291 @@
+#!/usr/bin/env bash
+# winvm: let Linux agents use the Omarchy Windows VM.
+# Starts the VM headless through omarchy-windows-vm's privileged actions, runs
+# commands over SSH, and shuts the VM down once no agent holds a lease on it.
+set -euo pipefail
+
+OWV=/usr/bin/omarchy-windows-vm
+SELF=$(readlink -f "$0")
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/winvm"
+LEASES="$STATE/leases"
+MANIFESTS="$STATE/manifests"
+KEY="$STATE/id_ed25519"
+KNOWN="$STATE/known_hosts"
+IDLE_MIN="${WINVM_IDLE_MINUTES:-15}"
+STALE_MIN="${WINVM_STALE_MINUTES:-240}"
+ROOT='C:/worktrees'
+
+mkdir -p "$LEASES" "$MANIFESTS"
+
+die() {
+  echo "winvm: $*" >&2
+  exit 1
+}
+
+win_user() {
+  local user
+  user=$(sed -n 's/^USERNAME=//p' "$HOME/.config/windows/credentials" 2>/dev/null)
+  printf '%s' "${WINVM_USER:-${user:-docker}}"
+}
+
+# Privileged VM actions. The polkit rule from `winvm setup` lets exactly these
+# run without a password prompt, which is what makes the VM agent-startable.
+priv() {
+  [[ -x $OWV ]] || die "$OWV not found; install the Omarchy Windows VM first"
+  pkexec "$OWV" __priv "$@" || die "omarchy-windows-vm __priv $1 failed (polkit rule missing? run: winvm setup)"
+}
+
+vm_status() { priv status; }
+
+lock() {
+  exec 9>"$STATE/lock"
+  flock 9
+}
+
+probe() { timeout 1 bash -c "</dev/tcp/$1/22" 2>/dev/null; }
+
+# The container publishes only RDP and noVNC, but dockur forwards every port on
+# the container's own bridge IP to the guest, so SSH goes to that IP.
+vm_ip() {
+  local cached cidr base prefix last ip
+  cached=$(cat "$STATE/ip" 2>/dev/null || true)
+  if [[ -n $cached ]] && probe "$cached"; then
+    echo "$cached"
+    return
+  fi
+  for cidr in $(ip -o -4 addr show | awk '$2 ~ /^(br-|docker)/ {print $4}'); do
+    base=${cidr%/*}
+    prefix=${base%.*}
+    for last in 2 3 4 5 6 7 8; do
+      ip="$prefix.$last"
+      [[ $ip == "$base" ]] && continue
+      if probe "$ip"; then
+        echo "$ip" >"$STATE/ip"
+        echo "$ip"
+        return
+      fi
+    done
+  done
+  return 1
+}
+
+ssh_opts() {
+  printf '%s\n' -i "$KEY" -o IdentitiesOnly=yes -o BatchMode=yes \
+    -o UserKnownHostsFile="$KNOWN" -o HostKeyAlias=winvm \
+    -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -o ServerAliveInterval=30 -o LogLevel=ERROR
+}
+
+# Raw SSH: the guest's default shell is cmd.exe, so stdin streams straight
+# through to the command (used for tar).
+wsh() {
+  local ip opts
+  ip=$(vm_ip) || die "Windows VM is not reachable over SSH; run: winvm up"
+  mapfile -t opts < <(ssh_opts)
+  ssh "${opts[@]}" "$(win_user)@$ip" "$@"
+}
+
+# PowerShell 7 over SSH (5.1 aborts on redirected native stderr under Stop).
+# -EncodedCommand sidesteps cmd.exe quoting entirely.
+wps() {
+  local script encoded
+  # The trap prints errors as text; otherwise PowerShell serializes them as CLIXML over SSH.
+  script="\$ErrorActionPreference='Stop'; \$ProgressPreference='SilentlyContinue'
+\$PSStyle.OutputRendering='PlainText'
+trap { [Console]::Error.WriteLine((\$_ | Out-String).TrimEnd()); exit 1 }
+$1
+if (\$LASTEXITCODE) { exit \$LASTEXITCODE }; exit 0"
+  encoded=$(printf '%s' "$script" | iconv -t UTF-16LE | base64 -w0)
+  wsh "pwsh -NoProfile -NonInteractive -EncodedCommand $encoded"
+}
+
+worktree_top() { git rev-parse --show-toplevel 2>/dev/null || die "not inside a git worktree"; }
+
+worktree_id() {
+  local top=$1
+  local name=${top##*/}
+  printf '%s-%s' "${name//[^A-Za-z0-9._-]/-}" "$(printf '%s' "$top" | sha256sum | cut -c1-8)"
+}
+
+worktree_dir() {
+  local top
+  top=$(worktree_top) || return 1
+  printf '%s/%s' "$ROOT" "$(worktree_id "$top")"
+}
+
+# One lease per agent where the harness names agents (Paseo), else one per
+# worktree, so `down` in one place never releases another agent's claim.
+LEASE="${WINVM_LEASE:-${PASEO_AGENT_ID:-$(top=$(git rev-parse --show-toplevel 2>/dev/null) && worktree_id "$top" || echo manual)}}"
+
+wait_ssh() {
+  local i
+  for ((i = 0; i < 150; i++)); do
+    if vm_ip >/dev/null && wsh 'exit 0' 2>/dev/null; then
+      return 0
+    fi
+    sleep 2
+  done
+  die "VM started but SSH did not answer within 5 minutes (see SETUP.md)"
+}
+
+cmd_setup() {
+  [[ -f $KEY ]] || ssh-keygen -q -t ed25519 -N '' -C winvm -f "$KEY"
+  mkdir -p "$HOME/.local/bin"
+  ln -sfn "$SELF" "$HOME/.local/bin/winvm"
+  local dir
+  dir=$(dirname "$SELF")/../setup
+  sed "s/@USER@/$(id -un)/" "$dir/50-omarchy-windows-vm.rules.in" >"$STATE/50-omarchy-windows-vm.rules"
+  if [[ -d $HOME/Windows ]]; then
+    install -m 0644 "$dir/guest-setup.ps1" "$HOME/Windows/winvm-guest-setup.ps1"
+  else
+    echo "(~/Windows is missing: run omarchy-windows-vm install first, then winvm setup again)"
+  fi
+  cat <<EOF
+1. Let agents start/stop the VM without a password prompt:
+
+   sudo install -m 0644 $STATE/50-omarchy-windows-vm.rules /etc/polkit-1/rules.d/
+
+2. In the VM (winvm gui), open PowerShell as Administrator and run:
+
+   powershell -ExecutionPolicy Bypass -File \\\\host.lan\\Data\\winvm-guest-setup.ps1 -PublicKey '$(cat "$KEY.pub")'
+
+3. Check: winvm up && winvm run 'cmd /c ver' && winvm down
+EOF
+}
+
+cmd_up() {
+  lock
+  touch "$LEASES/$LEASE"
+  if [[ $(vm_status) != running ]]; then
+    echo "winvm: starting Windows VM..." >&2
+    # The guest's file share can leave ~/Windows setgid; omarchy-windows-vm then
+    # refuses to start (it wants mode exactly 700) and prints nothing.
+    [[ -g $HOME/Windows ]] && chmod g-s "$HOME/Windows"
+    priv up_wait >&2
+  fi
+  flock -u 9
+  wait_ssh
+  echo "winvm: ready (lease $LEASE)" >&2
+}
+
+cmd_down() {
+  rm -f "$LEASES/$LEASE"
+  # Restart the idle timer; reap stops the VM only if no lease remains by then.
+  systemctl --user stop winvm-reap.timer 2>/dev/null || true
+  systemd-run --user --quiet --collect --unit=winvm-reap --on-active="${IDLE_MIN}m" "$SELF" reap
+  echo "winvm: lease released; VM stops in ${IDLE_MIN} min if no other lease remains" >&2
+}
+
+cmd_reap() {
+  lock
+  find "$LEASES" -type f -mmin +"$STALE_MIN" -delete
+  [[ -z $(ls -A "$LEASES") ]] || exit 0
+  # A human is on the desktop (RDP or the noVNC browser tab).
+  [[ -n $(ss -Htn state established '( dport = :3389 or dport = :8006 )' 2>/dev/null) ]] && exit 0
+  [[ $(vm_status) == running ]] && priv down
+}
+
+cmd_run() {
+  local dir=""
+  if [[ ${1:-} == --cwd ]]; then
+    dir=$2
+    shift 2
+  fi
+  [[ ${1:-} == -- ]] && shift
+  [[ $# -gt 0 ]] || die "usage: winvm run [--cwd DIR] [--] COMMAND"
+  [[ -n $dir ]] || dir=$(worktree_dir 2>/dev/null || echo 'C:/')
+  [[ -f $LEASES/$LEASE ]] || cmd_up
+  touch "$LEASES/$LEASE"
+  wps "Set-Location -LiteralPath '$dir'; $*"
+}
+
+cmd_sync() {
+  local top id dir new old deleted
+  top=$(worktree_top)
+  id=$(worktree_id "$top")
+  dir="$ROOT/$id"
+  [[ -f $LEASES/$LEASE ]] || cmd_up
+  touch "$LEASES/$LEASE"
+  new=$(mktemp)
+  deleted=$(mktemp)
+  trap 'rm -f "$new" "$deleted"' RETURN
+  # Tracked plus untracked-but-not-ignored files: what the agent sees, minus build output.
+  git -C "$top" ls-files -co --exclude-standard | sort -u | while IFS= read -r f; do
+    [[ -f $top/$f || -L $top/$f ]] && printf '%s\n' "$f"
+  done >"$new"
+  old="$MANIFESTS/$id"
+  [[ -f $old ]] && comm -23 "$old" "$new" >"$deleted"
+  wsh "if not exist \"$dir\" mkdir \"${dir//\//\\}\""
+  tr '\n' '\0' <"$new" | tar -C "$top" --null -T - -czf - | wsh "tar.exe -xzf - -C \"$dir\""
+  if [[ -s $deleted ]]; then
+    wsh "powershell -NoProfile -Command \"\$input | ForEach-Object { Remove-Item -LiteralPath (Join-Path '$dir' \$_) -Force -ErrorAction SilentlyContinue }\"" <"$deleted"
+  fi
+  cp "$new" "$old"
+  sync_git "$top" "$id" "$dir"
+  echo "winvm: synced $(wc -l <"$new") files to $dir ($(wc -l <"$deleted") removed) at $(git -C "$top" rev-parse --short HEAD)" >&2
+  echo "$dir"
+}
+
+# Make the Windows copy a git checkout of the same commit, so `git rev-parse
+# HEAD`, `git status` and `git diff` there match Linux. History travels as a
+# bundle, resent only when HEAD moves; `reset` updates HEAD and the index and
+# leaves the synced working tree (uncommitted changes included) alone.
+sync_git() {
+  local top=$1 id=$2 dir=$3 head branch stamp tmp
+  head=$(git -C "$top" rev-parse HEAD)
+  branch=$(git -C "$top" symbolic-ref -q --short HEAD || echo winvm-detached)
+  stamp="$MANIFESTS/$id.head"
+  if [[ $(cat "$stamp" 2>/dev/null) != "$head" ]]; then
+    tmp=$(mktemp -d)
+    mkdir -p "$tmp/.bundles"
+    git -C "$top" bundle create -q "$tmp/.bundles/$id.bundle" HEAD
+    tar -C "$tmp" -czf - .bundles | wsh "tar.exe -xzf - -C \"$ROOT\""
+    rm -rf "$tmp"
+    wps "Set-Location -LiteralPath '$dir'
+if (-not (Test-Path .git)) { git init -q; git config core.autocrlf false; Add-Content .git/info/exclude 'mise.toml' }
+git fetch -q '$ROOT/.bundles/$id.bundle' HEAD
+git update-ref 'refs/heads/$branch' $head
+git symbolic-ref HEAD 'refs/heads/$branch'
+git reset -q" >/dev/null
+    echo "$head" >"$stamp"
+  fi
+}
+
+cmd_pull() {
+  [[ $# -eq 2 ]] || die "usage: winvm pull WINDOWS_PATH LOCAL_DIR"
+  local src=$1 dest=$2
+  mkdir -p "$dest"
+  wsh "tar.exe -czf - -C \"$(dirname "$src")\" \"$(basename "$src")\"" | tar -xmzf - -C "$dest" # -m: guest clock and timezone differ from the host
+}
+
+cmd_status() {
+  echo "vm:     $(vm_status)"
+  echo "ssh:    $(vm_ip 2>/dev/null || echo unreachable)"
+  echo "leases: $(ls -A "$LEASES" | tr '\n' ' ')"
+  [[ -n $(git rev-parse --show-toplevel 2>/dev/null) ]] && echo "dir:    $(worktree_dir)"
+  return 0
+}
+
+cmd_gui() { exec "$OWV" launch --keep-alive; }
+
+case "${1:-}" in
+setup | up | down | reap | run | sync | pull | status | gui)
+  cmd=$1
+  shift
+  "cmd_$cmd" "$@"
+  ;;
+path) echo "$(worktree_dir)" ;;
+*)
+  cat <<EOF
+Usage: winvm <command>
+  up                  start the VM if needed and take a lease (waits for SSH)
+  sync                copy this git worktree to C:/worktrees/<id>, print that path
+  run [--cwd DIR] CMD run a PowerShell command, default cwd is this worktree's copy
+  pull WINPATH DIR    copy a file or folder from Windows into DIR
+  down                release the lease; VM stops after ${IDLE_MIN} min with no leases
+  status              VM state, SSH address, active leases
+  path                this worktree's Windows path
+  gui                 open the VM desktop over RDP (keeps it running)
+  setup               one-time machine setup instructions
+EOF
+  ;;
+esac
