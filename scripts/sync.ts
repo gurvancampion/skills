@@ -4,9 +4,9 @@ import { basename, dirname, join, resolve, sep } from 'node:path'
 import { sources } from '../meta.ts'
 import { assertValid, listSkills, readSkillName, root, skillsRoot } from './skills.ts'
 
-const args = process.argv.slice(2)
-if (args.some(arg => arg !== '--update'))
-  throw new Error('Usage: node scripts/sync.ts [--update]')
+const [flag, ...keys] = process.argv.slice(2)
+if ((flag && flag !== '--update') || keys.some(key => !(key in sources)))
+  throw new Error(`Usage: node scripts/sync.ts [--update [${Object.keys(sources).join('|')}...]]`)
 
 // Git hooks and `git rebase --exec` export GIT_DIR, which would make every `git -C sources/<key>`
 // call read this repository instead of the submodule, and record the wrong commit in SOURCE.md.
@@ -24,8 +24,10 @@ for (const path of expected.filter(path => !declared.includes(path)))
   throw new Error(`meta.ts lists ${path} but it is not a submodule; add it with \`git submodule add <url> ${path}\``)
 
 // `.gitmodules` marks every source shallow, so this fetches one commit per source.
-// --update moves each pin to the tip of the upstream default branch.
-execFileSync('git', ['submodule', 'update', '--init', ...(args.includes('--update') ? ['--remote'] : []), '--', ...expected], { cwd: root, env, stdio: 'inherit' })
+// --update then moves the pins of the given sources, or of all, to their upstream default branch tip.
+execFileSync('git', ['submodule', 'update', '--init', '--', ...expected], { cwd: root, env, stdio: 'inherit' })
+if (flag)
+  execFileSync('git', ['submodule', 'update', '--remote', '--', ...(keys.length ? keys.map(key => `sources/${key}`) : expected)], { cwd: root, env, stdio: 'inherit' })
 
 // A SOURCE.md marks a synced copy: remove every one, then regenerate them. Hand-written skills have
 // none, so they stay, and a target folder can also hold hand-written skills.

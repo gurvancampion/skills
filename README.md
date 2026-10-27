@@ -87,6 +87,7 @@ Requires Node.js 24 (or 22.18+), which runs the TypeScript scripts directly.
 ```bash
 node scripts/sync.ts            # regenerate the copies from the pinned commits
 node scripts/sync.ts --update   # move every source to its upstream tip, then regenerate
+node scripts/sync.ts --update mattpocock   # move only the listed sources
 npm run check                   # fail if the committed copies differ from the pinned sources
 ```
 
