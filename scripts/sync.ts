@@ -1,12 +1,12 @@
 import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join, resolve, sep } from 'node:path'
+import { basename, dirname, join, resolve, sep } from 'node:path'
 import { sources } from '../meta.ts'
 import { assertValid, listSkills, readSkillName, root, skillsRoot } from './skills.ts'
 
-const args = process.argv.slice(2)
-if (args.some(arg => arg !== '--update'))
-  throw new Error('Usage: node scripts/sync.ts [--update]')
+const [flag, ...keys] = process.argv.slice(2)
+if ((flag && flag !== '--update') || keys.some(key => !(key in sources)))
+  throw new Error(`Usage: node scripts/sync.ts [--update [${Object.keys(sources).join('|')}...]]`)
 
 // Git hooks and `git rebase --exec` export GIT_DIR, which would make every `git -C sources/<key>`
 // call read this repository instead of the submodule, and record the wrong commit in SOURCE.md.
@@ -24,8 +24,10 @@ for (const path of expected.filter(path => !declared.includes(path)))
   throw new Error(`meta.ts lists ${path} but it is not a submodule; add it with \`git submodule add <url> ${path}\``)
 
 // `.gitmodules` marks every source shallow, so this fetches one commit per source.
-// --update moves each pin to the tip of the upstream default branch.
-execFileSync('git', ['submodule', 'update', '--init', ...(args.includes('--update') ? ['--remote'] : []), '--', ...expected], { cwd: root, env, stdio: 'inherit' })
+// --update then moves the pins of the given sources, or of all, to their upstream default branch tip.
+execFileSync('git', ['submodule', 'update', '--init', '--', ...expected], { cwd: root, env, stdio: 'inherit' })
+if (flag)
+  execFileSync('git', ['submodule', 'update', '--remote', '--', ...(keys.length ? keys.map(key => `sources/${key}`) : expected)], { cwd: root, env, stdio: 'inherit' })
 
 // A SOURCE.md marks a synced copy: remove every one, then regenerate them. Hand-written skills have
 // none, so they stay, and a target folder can also hold hand-written skills.
@@ -40,7 +42,11 @@ for (const [key, source] of Object.entries(sources)) {
   if (!existsSync(license))
     throw new Error(`${key}: license ${source.license} not found`)
 
-  for (const [path, name] of Object.entries(source.skills)) {
+  for (const [path, destination] of Object.entries(source.skills)) {
+    // `npx skills` reads three levels below skills/: <target>/<category>/<name> at most
+    if (!/^(?:[\w.-]+\/)?[\w.-]+$/.test(destination))
+      throw new Error(`${key}: ${destination} must be <name> or <category>/<name>`)
+    const name = basename(destination)
     const from = resolve(sourceRoot, path)
     if (!from.startsWith(sourceRoot + sep) || !existsSync(join(from, 'SKILL.md')))
       throw new Error(`${key}: no SKILL.md in ${path}; did upstream move it?`)
@@ -49,7 +55,7 @@ for (const [key, source] of Object.entries(sources)) {
       throw new Error(`${key}: ${path} declares name ${declaredName ?? '(none)'}, meta.ts expects ${name}`)
 
     const installedName = `${source.prefix ?? ''}${name}`
-    const to = join(skillsRoot, source.target, installedName)
+    const to = join(skillsRoot, source.target, dirname(destination), installedName)
     cpSync(from, to, { recursive: true })
     const skillFile = join(to, 'SKILL.md')
     if (source.prefix)
@@ -67,10 +73,13 @@ for (const [key, source] of Object.entries(sources)) {
   }
 }
 
-// An origin folder left empty belonged to a source removed from meta.ts
-for (const entry of readdirSync(skillsRoot, { withFileTypes: true })) {
-  if (entry.isDirectory() && readdirSync(join(skillsRoot, entry.name)).length === 0)
-    rmSync(join(skillsRoot, entry.name), { recursive: true })
+// A category or origin folder left empty belonged to skills or a source removed from meta.ts
+const removeIfEmpty = (dir: string) => readdirSync(dir).length === 0 && rmSync(dir, { recursive: true })
+for (const origin of readdirSync(skillsRoot, { withFileTypes: true }).filter(entry => entry.isDirectory())) {
+  const originDir = join(skillsRoot, origin.name)
+  for (const category of readdirSync(originDir, { withFileTypes: true }).filter(entry => entry.isDirectory()))
+    removeIfEmpty(join(originDir, category.name))
+  removeIfEmpty(originDir)
 }
 
 const skills = assertValid()

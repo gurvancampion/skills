@@ -4,12 +4,12 @@
 
 ## Catalog
 
-Skills are grouped by origin under `skills/`. Installs are flat, so agents invoke them by name only.
+Skills are grouped by origin under `skills/`, keeping an upstream category folder where it helps (one level at most: `npx skills` reads three levels below `skills/`). Installs are flat, so agents invoke them by name only.
 
 ```text
 skills/
 ├── gurvan/       # hand-written: create-pr, skill-authoring, journal, omarchy-windows-vm
-├── mattpocock/   # 26 skills from mattpocock/skills
+├── mattpocock/   # 26 skills from mattpocock/skills, in its engineering/ and productivity/ folders
 ├── pstack/       # blast-radius, create-verification-skill, maintain-verification-skill, unslop (cursor/plugins)
 ├── context7/     # find-docs
 ├── ponytail/     # ponytail-review
@@ -87,6 +87,7 @@ Requires Node.js 24 (or 22.18+), which runs the TypeScript scripts directly.
 ```bash
 node scripts/sync.ts            # regenerate the copies from the pinned commits
 node scripts/sync.ts --update   # move every source to its upstream tip, then regenerate
+node scripts/sync.ts --update mattpocock   # move only the listed sources
 npm run check                   # fail if the committed copies differ from the pinned sources
 ```
 
