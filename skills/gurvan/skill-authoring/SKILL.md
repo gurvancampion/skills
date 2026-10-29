@@ -21,8 +21,8 @@ Use it next to a skill creator, such as Anthropic's `skill-creator` for drafting
 4. **Scope.** Ask the user where the skill's limits sit, for example one tool, any project, any device. Values outside those limits stay out of the skill, and the agent finds or asks for them at runtime.
 5. **What exists.** Read the installed version, sibling skills and the real files or systems the skill works on. Report every place they disagree.
 6. **Current syntax.** Check each command, function name and file format against the tool's current docs or source.
-7. **Name.** Look in `~/.agents/skills` and the project's `.agents/skills` for the same or a close name. Propose a rename and apply it after approval.
-8. **Plan.** Show the folder tree, an outline of each step, what gets removed, and each open decision with a recommended answer. Write after approval. Keep drafts in a folder that outlives the session.
+7. **Name.** Look in `~/.agents/skills` and the project's `.agents/skills` for the same or a close name. Rename it when a clash is found, and report the rename.
+8. **Plan.** Show the folder tree, an outline of each step, what gets removed, and each open decision with a recommended answer, then write it. Keep drafts in a folder that outlives the session.
 
 ## Description
 
@@ -99,8 +99,8 @@ When a skill needs project facts, it reads them from a file at the repository ro
 
 1. Derive everything the environment answers, such as APIs, existing tickets and config.
 2. Ask the rest in one series, each with a recommended answer. Lists to prune (parents, labels) are one multiple-choice question, all kept by default.
-3. Show the full file and a one-line pointer for `AGENTS.md`, then write after approval.
-4. Later runs propose changes to the file and write them after approval.
+3. Show the full file and a one-line pointer for `AGENTS.md`, then write it.
+4. Later runs update the file and report the change.
 
 ## Install
 

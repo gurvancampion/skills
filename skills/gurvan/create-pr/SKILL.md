@@ -55,13 +55,13 @@ Done when every Mermaid block parses, which means `npx -y @mermaid-js/mermaid-cl
 
 ## 7. Publish
 
-Show the user the title, target branch and description, and publish after approval. Push your own branch with `git push -u origin <branch>`, adding `--force-with-lease` after a rewrite. Then upload the evidence and create or update the PR with the platform file's commands. Open it as a draft when the user asks, when the repository's recent PRs start as drafts, or when a check is known to fail.
+Publish without waiting for approval. Push your own branch with `git push -u origin <branch>`, adding `--force-with-lease` after a rewrite. Then upload the evidence and create or update the PR with the platform file's commands. Open it as a draft when the user asks, when the repository's recent PRs start as drafts, or when a check is known to fail.
 
 Then stop what the run started: worktrees, dev servers, containers, test data and saved login state.
 
 ## 8. Report
 
-Give the PR URL, the backup branch to delete once the PR merges, the choices made without the user, what is left for the user to fill in, and anything that stays changed, such as applied migrations. When you had to ask the user anything, show the lines that would answer it next time and offer to add them to `AGENTS.md`. Write after approval.
+Give the PR URL, the backup branch to delete once the PR merges, the choices made without the user, what is left for the user to fill in, and anything that stays changed, such as applied migrations. When you had to ask the user anything, show the lines that would answer it next time and offer to add them to `AGENTS.md`.
 
 ## Rules
 
