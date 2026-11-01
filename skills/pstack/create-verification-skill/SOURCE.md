@@ -2,4 +2,4 @@
 
 - Repository: https://github.com/cursor/plugins
 - Path: `pstack/skills/create-verification-skill`
-- Commit: `d457567332aa6989e753ea289f30ea2bfbc80bc0`
+- Commit: `ae5650febf4320793844c12c4adaa937f417f8da`
