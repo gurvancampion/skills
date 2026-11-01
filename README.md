@@ -10,7 +10,8 @@ Skills are grouped by origin under `skills/`, keeping an upstream category folde
 skills/
 ├── gurvan/       # hand-written: create-pr, skill-authoring, journal, omarchy-windows-vm
 ├── mattpocock/   # 26 skills from mattpocock/skills, in its engineering/ and productivity/ folders
-├── pstack/       # blast-radius, create-verification-skill, maintain-verification-skill, unslop (cursor/plugins)
+├── pstack/       # blast-radius, create-verification-skill, maintain-verification-skill, create-formal-verification-skill,
+│                 # maintain-formal-verification-skill, statechart, unslop (cursor/plugins)
 ├── context7/     # find-docs
 ├── ponytail/     # ponytail-review
 └── comfy-cli/    # comfy, comfy-custom-nodes, comfy-debug, comfy-director, comfy-relay
@@ -27,7 +28,7 @@ skills/
 
 ### Synced from upstream
 
-Each synced skill carries its upstream `LICENSE.md` and a `SOURCE.md` with the repository, path and pinned commit. The ComfyUI skills come from comfy-cli (GPL-3.0) and should match the installed CLI (`comfy --version`).
+Each synced skill carries its upstream `LICENSE.md` and a `SOURCE.md` with the repository, path and pinned commit. The ComfyUI skills come from comfy-cli (GPL-3.0) and should match the installed CLI (`comfy --version`). The pstack `statechart` skill runs a TypeScript command with Node.js 22.18+, Bun 1.1.5+ or Deno 2+, and installs Java and the TLA+ checker (TLC) through [mise](https://mise.jdx.dev) on its first run.
 
 ## Install
 

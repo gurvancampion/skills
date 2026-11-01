@@ -58,8 +58,11 @@ export const sources: Record<string, Source> = {
     license: 'pstack/LICENSE',
     skills: {
       'pstack/skills/blast-radius': 'blast-radius',
+      'pstack/skills/create-formal-verification-skill': 'create-formal-verification-skill',
       'pstack/skills/create-verification-skill': 'create-verification-skill',
+      'pstack/skills/maintain-formal-verification-skill': 'maintain-formal-verification-skill',
       'pstack/skills/maintain-verification-skill': 'maintain-verification-skill',
+      'pstack/skills/statechart': 'statechart',
       'pstack/skills/unslop': 'unslop',
     },
     replace: {
