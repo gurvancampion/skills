@@ -2,4 +2,4 @@
 
 - Repository: https://github.com/Comfy-Org/comfy-cli
 - Path: `comfy_cli/skills/comfy-custom-nodes`
-- Commit: `a9c5e207c8a84bc3597aef1ca7000ff78e141a8b`
+- Commit: `7de6247bc5038b041485452edb7e9f06d98453fb`
